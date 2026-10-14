@@ -40,6 +40,7 @@ Node 18+, no npm packages.
 - Deck states: `live` (fresh metadata), `pause` (positions arrive, metadata stale), `off` (nothing arrives).
 - Writes events to `server/server.log`: track changes, finished waveforms, pre-load result, loops, plugin silence.
 - Network Control fallback exists but is off (`vdjUrl: ''`). See Known issues.
+- Network adapter (`iface`, `--iface`): `auto` serves on the cable if it has an IPv4 address, else on Wi-Fi. Checked every 2 s, a change restarts the HTTP server on the new address and closes old connections. Cable = any macOS hardware port that is not Wi-Fi (`networksetup -listallhardwareports`, read again only when the adapter list changes). VPN and virtual adapters come last.
 
 ## Dashboard: `server/index.html`
 
@@ -63,4 +64,5 @@ Single file, no build step, no libraries.
 | Units of `get_loop_in_time` | Assumed ms, not verified with pitch ≠ 0 |
 | `SCALE` in the plugin | Set by eye |
 | Beat grid units (`SongBpm` as track samples per beat) | Assumed, not verified with pitch ≠ 0 |
+| Cable detection on macOS | By port name. A USB adapter named after its chip counts as cable, a phone hotspot over USB too |
 | Windows | No build yet |

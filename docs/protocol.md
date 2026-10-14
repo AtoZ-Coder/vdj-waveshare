@@ -70,7 +70,7 @@ Port `7777`.
 | Route | Returns |
 | --- | --- |
 | `GET /` | `server/index.html` |
-| `GET /events` | SSE. Default event: full state JSON, 10 per second, `grid: {first, beat}` in seconds per deck. Event `wave`: `{deck, rev, start, data}` with changed columns as base64 |
+| `GET /events` | SSE. Default event: full state JSON, 10 per second, `grid: {first, beat}` in seconds per deck, `net: {kind, name, ip}` for the link in use (`cable`, `wifi`, `other`). Event `wave`: `{deck, rev, start, data}` with changed columns as base64 |
 | `GET /wave/:deck` | Binary: `total × 3` bytes of columns, then `total` bytes of "computed" flags. Header `X-Rev` |
 
 A browser fetches `/wave/:deck` when `rev` changes, then applies `wave` events on top.

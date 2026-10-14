@@ -16,9 +16,10 @@ const CONFIG = {
   port: 7777,                      // sem sa pripája osvetľovač
   udpPort: 7778,                   // sem posiela plugin WaveShare
   decks: [1, 2, 3, 4],             // decky 3 a 4 sa zobrazia po prepnutí v prehliadači
-  // Network adapter for the lighting operator: '' = all adapters. Name ('en5'), IP ('169.254.3.4')
-  // or part of the macOS port name ('Ethernet', 'USB'). Same as: node server.js --iface en5. List: --list
-  iface: '',
+  // Network adapter for the lighting operator. 'auto' = cable when it has an address, else Wi-Fi,
+  // switches when the cable is plugged in or out. 'all' = every adapter. Or one adapter: name ('en5'),
+  // IP ('169.254.3.4') or part of the macOS port name ('USB'). Same as: node server.js --iface en5. List: --list
+  iface: 'auto',
   publishMs: 100,                  // stav prehliadačom 10x za sekundu
   fallbackMs: 1000,                // Network Control iba ako záloha, keď plugin nemá čerstvé údaje
 
@@ -225,6 +226,84 @@ function serve(req, res) {
   res.end();
 }
 
+// ---------- network adapter: cable first, Wi-Fi as fallback ----------
+
+const KIND = { cable: 'kábel', wifi: 'Wi-Fi', other: 'iné' };
+let portNames = {}, portKey = '';
+
+// macOS port names (Wi-Fi, USB 10/100/1000 LAN, Thunderbolt Bridge). Read again only when adapters change:
+// networksetup takes ~50 ms and would stall the 10 Hz state updates.
+function ports(names) {
+  const key = names.join();
+  if (key !== portKey && process.platform === 'darwin') {
+    portKey = key;
+    try {
+      const out = execFileSync('networksetup', ['-listallhardwareports'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+      portNames = {};
+      for (const m of out.matchAll(/Hardware Port: (.+)\nDevice: (\S+)/g)) portNames[m[2]] = m[1];
+    } catch {}
+  }
+  return portNames;
+}
+
+// cable: any real port that is not Wi-Fi (Ethernet, USB LAN, Thunderbolt). other: VPN, virtual machines.
+function kind(name, port) {
+  if (port) return /wi-?fi|airport|wlan/i.test(port) ? 'wifi' : 'cable';
+  if (/^wl/.test(name)) return 'wifi';
+  if (process.platform !== 'darwin' && /^(eth|en)/.test(name)) return 'cable';
+  return 'other';
+}
+
+function adapters() {
+  const nics = os.networkInterfaces(), p = ports(Object.keys(nics).sort());
+  const rank = { cable: 0, wifi: 1, other: 2 };
+  return Object.entries(nics).flatMap(([name, list]) => list
+    .filter(a => (a.family === 'IPv4' || a.family === 4) && !a.internal)
+    .map(a => ({ name, ip: a.address, port: p[name] || '', kind: kind(name, p[name]) })))
+    .sort((a, b) => rank[a.kind] - rank[b.kind]);
+}
+
+// CONFIG.iface: 'auto' = cable if it has an address, else Wi-Fi. 'all' = every adapter. Else one adapter.
+function choose() {
+  const all = adapters(), want = (CONFIG.iface || 'auto').trim().toLowerCase();
+  if (want === 'all') return { all, pick: null, key: 'all' };
+  const pick = want === 'auto' ? all[0]
+    : all.find(a => a.name.toLowerCase() === want || a.ip === want || (a.port && a.port.toLowerCase().includes(want)));
+  return { all, pick, key: pick ? pick.ip : 'none' };
+}
+
+// Checks every 2 s. Cable plugged in or pulled out: the server moves to the other adapter.
+// Browsers on the old adapter lose the connection; open the new address shown in the console.
+let web = null, webKey = '', waiting = false;
+const sockets = new Set();
+function watchNetwork() {
+  const { all, pick, key } = choose();
+  if (key !== webKey) {
+    webKey = key;
+    if (web) { web.close(); for (const s of sockets) s.destroy(); web = null; }
+    state.net = pick ? { kind: pick.kind, name: pick.name, ip: pick.ip } : null;
+    if (key === 'none') {
+      if (!waiting) console.log(`Adaptér "${CONFIG.iface}" nemá IPv4 adresu (kábel zapojený?). Čakám.`);
+      waiting = true;
+      log('http', `čakám na adaptér ${CONFIG.iface}`);
+    } else {
+      waiting = false;
+      web = http.createServer(serve);
+      web.on('connection', s => { sockets.add(s); s.on('close', () => sockets.delete(s)); });
+      web.on('error', e => { log('http chyba', e.message); webKey = ''; });   // e.g. address gone: next check retries
+      web.listen(CONFIG.port, pick ? pick.ip : undefined, () => {
+        log('http', pick ? `${KIND[pick.kind]} ${pick.name} ${pick.ip} ${pick.port}`.trim() : 'všetky adaptéry');
+        console.log('Osvetľovač otvorí v prehliadači:');
+        for (const a of pick ? [pick] : all) console.log(`  http://${a.ip}:${CONFIG.port}   ${KIND[a.kind]} ${a.name} ${a.port}`);
+        if (!pick) console.log(`Lokálne: http://localhost:${CONFIG.port}`);
+      });
+    }
+  }
+  setTimeout(watchNetwork, 2000);
+}
+
+// ---------- start ----------
+
 if (process.argv.includes('--test')) {
   (async () => {
     // node server.js --test                 → všetky príkazy
@@ -238,49 +317,13 @@ if (process.argv.includes('--test')) {
     process.exit();
   })();
 } else if (process.argv.includes('--list')) {
-  console.log('Sieťové adaptéry (vyber: node server.js --iface NÁZOV):');
-  for (const a of adapters()) console.log(`  ${a.name.padEnd(8)} ${a.ip.padEnd(16)} ${a.port}`);
+  console.log('Sieťové adaptéry (vyber: node server.js --iface NÁZOV, predvolené auto = kábel, inak Wi-Fi):');
+  for (const a of adapters()) console.log(`  ${a.name.padEnd(8)} ${a.ip.padEnd(16)} ${KIND[a.kind].padEnd(6)} ${a.port}`);
   process.exit();
 } else {
   const i = process.argv.indexOf('--iface');
-  if (i > 0) CONFIG.iface = process.argv[i + 1] || '';
+  if (i > 0) CONFIG.iface = process.argv[i + 1] || 'auto';
   udp.bind(CONFIG.udpPort, '127.0.0.1');
   log('server štart', CONFIG.vdjUrl ? `Network Control: ${CONFIG.vdjUrl}` : 'Network Control vypnutý');
-  listen();
-}
-
-// IPv4 adapters with the macOS port name (Wi-Fi, Thunderbolt Ethernet, USB LAN) when available
-function adapters() {
-  const ports = {};
-  if (process.platform === 'darwin') {
-    try {
-      const out = execFileSync('networksetup', ['-listallhardwareports'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-      for (const m of out.matchAll(/Hardware Port: (.+)\nDevice: (\S+)/g)) ports[m[2]] = m[1];
-    } catch {}
-  }
-  return Object.entries(os.networkInterfaces()).flatMap(([name, list]) => list
-    .filter(a => (a.family === 'IPv4' || a.family === 4) && !a.internal)
-    .map(a => ({ name, ip: a.address, port: ports[name] || '' })));
-}
-
-// All adapters, or only the chosen one. A cable plugged in later: wait until the adapter has an address.
-function listen() {
-  const want = CONFIG.iface.trim().toLowerCase();
-  const all = adapters();
-  const pick = want && all.find(a => a.name.toLowerCase() === want || a.ip === want || (a.port && a.port.toLowerCase().includes(want)));
-  if (want && !pick) {
-    if (!listen.waiting) {                                          // message once, then retry quietly
-      listen.waiting = true;
-      console.log(`Adaptér "${CONFIG.iface}" nemá IPv4 adresu (kábel zapojený?). Čakám. Dostupné:`);
-      for (const a of all) console.log(`  ${a.name.padEnd(8)} ${a.ip.padEnd(16)} ${a.port}`);
-    }
-    return setTimeout(listen, 2000);
-  }
-  const host = pick ? pick.ip : undefined;                        // undefined = all adapters
-  http.createServer(serve).listen(CONFIG.port, host, () => {
-    log('http', pick ? `iba adaptér ${pick.name} ${pick.ip} ${pick.port}`.trim() : 'všetky adaptéry');
-    console.log('Osvetľovač otvorí v prehliadači:');
-    for (const a of pick ? [pick] : all) console.log(`  http://${a.ip}:${CONFIG.port}   ${a.name} ${a.port}`);
-    if (!pick) console.log(`Lokálne: http://localhost:${CONFIG.port}`);
-  });
+  watchNetwork();
 }

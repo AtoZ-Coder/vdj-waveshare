@@ -20,7 +20,7 @@ Works with streaming (TIDAL), since the plugin reads the decoded audio inside Vi
 - 2 or 4 decks, colored like VirtualDJ: red, blue, green, orange
 - Pre-load: a track on a paused deck gets scanned while another deck plays
 - Phone, tablet and desktop layouts, made for touch: pinch zoom, double tap reset, full screen
-- Choose the network adapter, for a cable link to the lighting PC
+- Cable first: uses the Ethernet cable when it is plugged in, Wi-Fi when not
 - No cloud, no accounts, no npm packages
 
 ## Requirements
@@ -52,16 +52,22 @@ node server/server.js
 
 Keep the server window open during the set. Close VirtualDJ before you stop the server.
 
-## Cable instead of Wi-Fi
+## Cable or Wi-Fi
 
-Connect the DJ laptop and the lighting PC or tablet with an Ethernet cable (USB or Thunderbolt adapter on the Mac). Both sides get a `169.254.x.x` address on their own, no router needed.
+By default the server uses the cable when it is connected and Wi-Fi when it is not. It checks every 2 seconds and switches on its own when you plug the cable in or pull it out. The console and `server/server.log` print the new address, and the dashboard status shows `KÁBEL` or `WI-FI`.
+
+Cable setup: connect the DJ laptop and the lighting PC or tablet with an Ethernet cable (USB or Thunderbolt adapter on the Mac). Both sides get a `169.254.x.x` address on their own, no router needed. Open the cable address on the lighting device.
+
+A switch drops browsers on the old link. Open the new address shown in the console.
 
 ```sh
-node server/server.js --list          # adapters: en0 Wi-Fi, en5 USB 10/100/1000 LAN, ...
-node server/server.js --iface en5     # serve only on the cable
+node server/server.js --list          # adapters: en0 Wi-Fi, en5 cable (USB 10/100/1000 LAN), ...
+node server/server.js                 # auto: cable, else Wi-Fi
+node server/server.js --iface en5     # only this adapter, waits until it has an address
+node server/server.js --iface all     # every adapter at once
 ```
 
-`--iface` takes the adapter name, its IP or part of the port name (`--iface usb`). The server then ignores Wi-Fi. If the cable is not in yet, it waits and starts when the adapter gets an address. Set `iface` in `CONFIG` in `server.js` to make it permanent.
+`--iface` takes the adapter name, its IP or part of the port name (`--iface usb`). Set `iface` in `CONFIG` in `server.js` to make it permanent.
 
 On the tablet: open the address, tap the full screen button, set auto-lock to never.
 
