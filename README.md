@@ -14,11 +14,13 @@ Works with streaming (TIDAL), since the plugin reads the decoded audio inside Vi
 - Zoom from 2 to 64 seconds, by buttons, mouse wheel or pinch
 - Two views: MIX (bands overlaid) and PÁSMA (bands in separate lanes)
 - Energy strip: dark for breakdowns, bright green for drops
-- BPM as the largest number, plus key, tempo and time left
+- BPM as the largest number in the deck color, plus key, tempo and time left
+- Beat lines synced with the VirtualDJ beat grid, bars brighter
 - Loop region with length in beats
 - 2 or 4 decks, colored like VirtualDJ: red, blue, green, orange
 - Pre-load: a track on a paused deck gets scanned while another deck plays
-- Phone, tablet and desktop layouts
+- Phone, tablet and desktop layouts, made for touch: pinch zoom, double tap reset, full screen
+- Choose the network adapter, for a cable link to the lighting PC
 - No cloud, no accounts, no npm packages
 
 ## Requirements
@@ -50,6 +52,19 @@ node server/server.js
 
 Keep the server window open during the set. Close VirtualDJ before you stop the server.
 
+## Cable instead of Wi-Fi
+
+Connect the DJ laptop and the lighting PC or tablet with an Ethernet cable (USB or Thunderbolt adapter on the Mac). Both sides get a `169.254.x.x` address on their own, no router needed.
+
+```sh
+node server/server.js --list          # adapters: en0 Wi-Fi, en5 USB 10/100/1000 LAN, ...
+node server/server.js --iface en5     # serve only on the cable
+```
+
+`--iface` takes the adapter name, its IP or part of the port name (`--iface usb`). The server then ignores Wi-Fi. If the cable is not in yet, it waits and starts when the adapter gets an address. Set `iface` in `CONFIG` in `server.js` to make it permanent.
+
+On the tablet: open the address, tap the full screen button, set auto-lock to never.
+
 ## How it works
 
 ```
@@ -64,7 +79,7 @@ VirtualDJ ─ WaveShare plugin ─▶ UDP :7778 ─▶ server.js ─▶ HTTP/SSE
 ```
 plugin/   WaveShare.cpp (VirtualDJ plugin, C++17), build and test scripts
 server/   server.js (Node, no dependencies) and index.html (dashboard, single file)
-tools/    udp-test.js: prints raw plugin output
+tools/    simulate.js: plays audio files as fake decks. udp-test.js: prints raw plugin output
 docs/     docs and the project landing page (GitHub Pages)
 ```
 
@@ -72,6 +87,7 @@ docs/     docs and the project landing page (GitHub Pages)
 | --- | --- |
 | Test plugin logic without VirtualDJ | `plugin/test.sh` |
 | Build without installing | `plugin/build.sh --no-install` |
+| Test server and dashboard without VirtualDJ | `node tools/simulate.js --demo` or `node tools/simulate.js a.mp3 b.wav` |
 | Inspect plugin output | `node tools/udp-test.js` (server stopped) |
 | Check VirtualDJ script queries | `node server/server.js --test "get_bpm"` (needs Network Control) |
 

@@ -46,6 +46,8 @@ Node 18+, no npm packages.
 Single file, no build step, no libraries.
 
 - Canvas detail view with zoom (2-64 s), overview with energy strip, loop region.
+- Beat lines from the VirtualDJ beat grid: thin per beat, bright per bar. Zoomed out, bars only.
+- Touch: pinch to zoom, double tap resets to 16 s, 48 px buttons, full screen button.
 - Views: MIX (bands overlaid) and PÁSMA (bands in separate lanes).
 - 2 or 4 decks, deck colors 1 red, 2 blue, 3 green, 4 orange.
 - Smooth playhead: small errors fade out over time, large ones (seek, pause, new track) snap.
@@ -60,4 +62,5 @@ Single file, no build step, no libraries.
 | VirtualDJ wiki lists `Documents/VirtualDJ/PluginsArm` as plugin folder | Wrong on current versions. Real path: `~/Library/Application Support/VirtualDJ/PluginsMacArm/SoundEffect` |
 | Units of `get_loop_in_time` | Assumed ms, not verified with pitch ≠ 0 |
 | `SCALE` in the plugin | Set by eye |
+| Beat grid units (`SongBpm` as track samples per beat) | Assumed, not verified with pitch ≠ 0 |
 | Windows | No build yet |

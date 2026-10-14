@@ -6,6 +6,7 @@ const dgram = require('dgram');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { execFileSync } = require('child_process');
 
 const CONFIG = {
   // Network Control vypnutý: jeho vlákna zhadzujú VDJ pri zatváraní (crash 13. 10. 21:35, 21:59, 22:57).
@@ -15,6 +16,9 @@ const CONFIG = {
   port: 7777,                      // sem sa pripája osvetľovač
   udpPort: 7778,                   // sem posiela plugin WaveShare
   decks: [1, 2, 3, 4],             // decky 3 a 4 sa zobrazia po prepnutí v prehliadači
+  // Network adapter for the lighting operator: '' = all adapters. Name ('en5'), IP ('169.254.3.4')
+  // or part of the macOS port name ('Ethernet', 'USB'). Same as: node server.js --iface en5. List: --list
+  iface: '',
   publishMs: 100,                  // stav prehliadačom 10x za sekundu
   fallbackMs: 1000,                // Network Control iba ako záloha, keď plugin nemá čerstvé údaje
 
@@ -114,7 +118,7 @@ loop(CONFIG.publishMs, async () => {
       watch(d, 'preload', m.preload);
       watch(d, 'loop', m.loop ? `${m.loop.in.toFixed(2)}-${m.loop.out.toFixed(2)}s ${m.loop.beats}b` : null);
       Object.assign(s, { title: m.title, artist: m.artist, key: m.key, bpm: m.bpm || null, length: m.len || null,
-        playing: mode === 'live' && m.playing, audible: m.audible, loop: m.loop });
+        playing: mode === 'live' && m.playing, audible: m.audible, loop: m.loop, grid: m.grid });
     }
     if (mode === 'off' && !httpOnline) s.playing = false;           // nič nevieme: zastaviť playhead, nie hádať
     // Počas prehrávania presná pozícia z pluginu, dopočítaná na čas odoslania.
@@ -166,7 +170,7 @@ udp.on('message', b => {
     h.push([now, sec]);
     while (h.length > 2 && now - h[0][0] > 1000) h.shift();
     if (now - h[0][0] > 200) w.rate = (sec - h[0][1]) / (now - h[0][0]) * 1000;
-    w.sec = sec; w.at = now;
+    w.sec = sec; w.at = now; w.sr = sr || 44100;
     if (total && scanned === total && w.doneId !== id) { w.doneId = id; log(`deck ${deck}`, `waveform skladby #${id} hotový`); }
     s.scanned = scanned;
   } else if (b[5] === 3 && b.length >= 43) {
@@ -174,7 +178,11 @@ udp.on('message', b => {
     const str = () => { const n = b[o]; const t = b.toString('utf8', o + 1, o + 1 + n); o += 1 + n; return t; };
     const f = i => b.readFloatLE(20 + 4 * i), flags = b[12];
     const title = str(), artist = str(), key = str();
+    // beat grid after the strings (older plugins stop here): beat 0 and beat length in samples
+    const sr = w.sr || 44100, gb = o + 8 <= b.length ? b.readUInt32LE(o + 4) : 0;
+    const grid = gb ? { first: b.readInt32LE(o) / sr, beat: gb / sr } : null;
     w.meta = {
+      grid,
       t: performance.now() - b.readUInt32LE(16), title, artist, key,
       playing: !!(flags & 1), audible: !!(flags & 2), bpm: f(0), len: f(1),
       preload: flags & 8 ? 'ok' : flags & 16 ? 'vypnutý (VDJ vracia audio iného decku)' : 'neoverený',
@@ -229,14 +237,50 @@ if (process.argv.includes('--test')) {
     }
     process.exit();
   })();
+} else if (process.argv.includes('--list')) {
+  console.log('Sieťové adaptéry (vyber: node server.js --iface NÁZOV):');
+  for (const a of adapters()) console.log(`  ${a.name.padEnd(8)} ${a.ip.padEnd(16)} ${a.port}`);
+  process.exit();
 } else {
+  const i = process.argv.indexOf('--iface');
+  if (i > 0) CONFIG.iface = process.argv[i + 1] || '';
   udp.bind(CONFIG.udpPort, '127.0.0.1');
   log('server štart', CONFIG.vdjUrl ? `Network Control: ${CONFIG.vdjUrl}` : 'Network Control vypnutý');
-  http.createServer(serve).listen(CONFIG.port, () => {
-    const ips = Object.values(os.networkInterfaces()).flat()
-      .filter(i => (i.family === 'IPv4' || i.family === 4) && !i.internal).map(i => i.address);
+  listen();
+}
+
+// IPv4 adapters with the macOS port name (Wi-Fi, Thunderbolt Ethernet, USB LAN) when available
+function adapters() {
+  const ports = {};
+  if (process.platform === 'darwin') {
+    try {
+      const out = execFileSync('networksetup', ['-listallhardwareports'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+      for (const m of out.matchAll(/Hardware Port: (.+)\nDevice: (\S+)/g)) ports[m[2]] = m[1];
+    } catch {}
+  }
+  return Object.entries(os.networkInterfaces()).flatMap(([name, list]) => list
+    .filter(a => (a.family === 'IPv4' || a.family === 4) && !a.internal)
+    .map(a => ({ name, ip: a.address, port: ports[name] || '' })));
+}
+
+// All adapters, or only the chosen one. A cable plugged in later: wait until the adapter has an address.
+function listen() {
+  const want = CONFIG.iface.trim().toLowerCase();
+  const all = adapters();
+  const pick = want && all.find(a => a.name.toLowerCase() === want || a.ip === want || (a.port && a.port.toLowerCase().includes(want)));
+  if (want && !pick) {
+    if (!listen.waiting) {                                          // message once, then retry quietly
+      listen.waiting = true;
+      console.log(`Adaptér "${CONFIG.iface}" nemá IPv4 adresu (kábel zapojený?). Čakám. Dostupné:`);
+      for (const a of all) console.log(`  ${a.name.padEnd(8)} ${a.ip.padEnd(16)} ${a.port}`);
+    }
+    return setTimeout(listen, 2000);
+  }
+  const host = pick ? pick.ip : undefined;                        // undefined = all adapters
+  http.createServer(serve).listen(CONFIG.port, host, () => {
+    log('http', pick ? `iba adaptér ${pick.name} ${pick.ip} ${pick.port}`.trim() : 'všetky adaptéry');
     console.log('Osvetľovač otvorí v prehliadači:');
-    for (const ip of ips) console.log(`  http://${ip}:${CONFIG.port}`);
-    console.log(`Lokálne: http://localhost:${CONFIG.port}`);
+    for (const a of pick ? [pick] : all) console.log(`  http://${a.ip}:${CONFIG.port}   ${a.name} ${a.port}`);
+    if (!pick) console.log(`Lokálne: http://localhost:${CONFIG.port}`);
   });
 }
