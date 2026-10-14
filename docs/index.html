@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VDJ WaveShare</title>
+<meta name="description" content="Live VirtualDJ waveforms for your lighting operator. Browser dashboard, 4 decks, works with TIDAL.">
+<meta property="og:title" content="VDJ WaveShare">
+<meta property="og:description" content="Live VirtualDJ waveforms for your lighting operator.">
+<meta property="og:image" content="screenshot.png">
+<style>
+:root {
+  --bg: #0b0b12; --chrome: #262636; --hi: #5d5d7a; --lo: #0c0c14;
+  --lcd: #000; --fg: #1aff1a; --dim: #8d8da6; --glow: rgba(26, 255, 26, .45);
+  --red: #c8483b; --blue: #4a86d8; --green: #46a457; --orange: #d98a35; --stripe: #9c8a3e;
+  --sans: Tahoma, Verdana, "Segoe UI", sans-serif;
+  --mono: Menlo, Consolas, "DejaVu Sans Mono", monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; margin: 0; }
+body { background: var(--bg); color: #d8d8e4; font: 16px/1.55 var(--sans); }
+a { color: var(--fg); }
+.wrap { max-width: 1040px; margin: 0 auto; padding: 0 16px; }
+.win {
+  background: var(--chrome); border: 1px solid; border-color: var(--hi) var(--lo) var(--lo) var(--hi);
+  box-shadow: inset 1px 1px 0 #3c3c55, inset -1px -1px 0 #17171f, 0 0 0 1px #000; margin: 18px 0;
+}
+.tbar {
+  display: flex; align-items: center; gap: 8px; height: 18px; padding: 0 6px;
+  background: repeating-linear-gradient(to bottom, var(--stripe) 0 1px, transparent 1px 3px) 0 5px / 100% 9px no-repeat;
+  font: bold 10px/1 var(--sans); letter-spacing: .18em; text-transform: uppercase; color: #f0e6b8;
+}
+.tbar span { background: var(--chrome); padding: 0 6px; }
+.body { padding: 18px 20px 22px; }
+.lcd {
+  background: var(--lcd); color: var(--fg); text-shadow: 0 0 6px var(--glow); font-family: var(--mono);
+  border: 1px solid; border-color: var(--lo) var(--hi) var(--hi) var(--lo);
+}
+h1 { font: 700 clamp(34px, 7vw, 64px)/1.05 var(--mono); letter-spacing: .02em; padding: 14px 18px; }
+.tag { font-size: clamp(17px, 2.4vw, 21px); margin: 16px 0 20px; max-width: 46ch; }
+.btns { display: flex; flex-wrap: wrap; gap: 10px; }
+.btn {
+  display: inline-block; text-decoration: none; font: bold 14px/1 var(--sans); letter-spacing: .05em;
+  color: #15151f; background: #c3c3cf; padding: 12px 18px;
+  border: 1px solid; border-color: #f2f2f7 #55556a #55556a #f2f2f7;
+}
+.btn:active { border-color: #55556a #f2f2f7 #f2f2f7 #55556a; }
+.btn:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+.btn.go { background: var(--fg); }
+.shot { display: block; width: 100%; height: auto; border: 1px solid #000; }
+.decks { display: flex; gap: 6px; margin-top: 14px; }
+.decks i { flex: 1; height: 6px; }
+h2 { font: bold 12px var(--sans); letter-spacing: .18em; text-transform: uppercase; color: var(--dim); margin-bottom: 12px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
+.grid .lcd { padding: 12px 14px; }
+.grid b { display: block; font-size: 15px; margin-bottom: 4px; }
+.grid p { color: #11b811; text-shadow: none; font-size: 13px; line-height: 1.45; }
+pre { padding: 14px 16px; overflow-x: auto; font-size: 14px; line-height: 1.6; }
+pre .c { color: #3f8f3f; text-shadow: none; }
+.flow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-family: var(--mono); font-size: 14px; }
+.flow .lcd { padding: 8px 12px; }
+.flow span { color: var(--dim); }
+.two { display: grid; grid-template-columns: 1fr 260px; gap: 18px; align-items: start; }
+.two img { width: 100%; height: auto; border: 1px solid #000; }
+footer { color: var(--dim); font-size: 13px; padding: 10px 0 40px; }
+@media (max-width: 760px) { .two { grid-template-columns: 1fr; } .two img { max-width: 260px; } .body { padding: 14px; } }
+</style>
+</head>
+<body>
+<main class="wrap">
+
+  <section class="win">
+    <div class="tbar"><span>VDJ WaveShare</span></div>
+    <div class="body">
+      <h1 class="lcd">VDJ WAVESHARE</h1>
+      <p class="tag">Live VirtualDJ waveforms for your lighting operator. They open a browser, you play. They see every drop coming.</p>
+      <div class="btns">
+        <a class="btn go" href="https://github.com/kebab-py/vdj-waveshare">View on GitHub</a>
+        <a class="btn" href="https://github.com/kebab-py/vdj-waveshare#quick-start">Quick start</a>
+        <a class="btn" href="architecture.html">How it works</a>
+      </div>
+      <div class="decks" aria-hidden="true"><i style="background:var(--red)"></i><i style="background:var(--blue)"></i><i style="background:var(--green)"></i><i style="background:var(--orange)"></i></div>
+    </div>
+  </section>
+
+  <section class="win">
+    <div class="tbar"><span>Dashboard</span></div>
+    <div class="body">
+      <img class="shot" src="screenshot.png" width="1600" height="1000" alt="Dashboard with 4 decks: big BPM, time left, 3-band waveform in separate lanes, loop region and energy strip">
+    </div>
+  </section>
+
+  <section class="win">
+    <div class="tbar"><span>Features</span></div>
+    <div class="body grid">
+      <div class="lcd"><b>3-band waveform</b><p>Bass, mids, highs. 100 columns per second. MIX or separate lanes.</p></div>
+      <div class="lcd"><b>Works with TIDAL</b><p>Reads decoded audio inside VirtualDJ. No files on disk needed.</p></div>
+      <div class="lcd"><b>BPM first</b><p>Largest number on screen. Key, tempo and time left next to it.</p></div>
+      <div class="lcd"><b>Energy strip</b><p>Dark for breakdowns, bright green for drops. Spot the next build early.</p></div>
+      <div class="lcd"><b>Loops</b><p>Loop region and length in beats. Playhead stays inside the loop.</p></div>
+      <div class="lcd"><b>Zoom</b><p>2 to 64 seconds. Buttons, mouse wheel or two fingers.</p></div>
+      <div class="lcd"><b>4 decks</b><p>Colored like VirtualDJ: red, blue, green, orange.</p></div>
+      <div class="lcd"><b>Pre-load</b><p>Tracks on a paused deck get scanned while another deck plays.</p></div>
+      <div class="lcd"><b>Local only</b><p>No cloud, no accounts. Audio never leaves the DJ laptop.</p></div>
+    </div>
+  </section>
+
+  <section class="win">
+    <div class="tbar"><span>How it works</span></div>
+    <div class="body">
+      <div class="flow">
+        <div class="lcd">VirtualDJ plugin</div><span>UDP</span>
+        <div class="lcd">server.js</div><span>HTTP + SSE</span>
+        <div class="lcd">any browser</div>
+      </div>
+      <p style="margin-top:14px">A VirtualDJ effect computes the waveform from the decoded track and sends 3 bytes per 10 ms to a small Node server on the same Mac. The server shares a dashboard with every device in the network.</p>
+    </div>
+  </section>
+
+  <section class="win">
+    <div class="tbar"><span>Quick start</span></div>
+    <div class="body two">
+      <pre class="lcd"><span class="c"># macOS, Node 18+, Xcode Command Line Tools</span>
+git clone https://github.com/kebab-py/vdj-waveshare.git
+cd vdj-waveshare
+<span class="c"># close VirtualDJ first</span>
+plugin/build.sh
+node server/server.js
+<span class="c"># VirtualDJ: switch on the WaveShare effect
+# on each deck, then open the printed address</span></pre>
+      <img src="screenshot-phone.png" width="390" height="844" alt="Dashboard on a phone" loading="lazy">
+    </div>
+  </section>
+
+  <footer>GPL-3.0. Built by <a href="https://github.com/kebab-py">kebab-py</a> and contributors. Not affiliated with Atomix Productions or VirtualDJ. Screenshots show simulated data.</footer>
+</main>
+</body>
+</html>

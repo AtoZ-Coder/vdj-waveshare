@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="sk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1c1c2a">
+<title>VDJ waveform</title>
+<style>
+:root {
+  --bg: #0b0b12;
+  --chrome: #262636; --chrome-hi: #5d5d7a; --chrome-lo: #0c0c14;
+  --stripe: #9c8a3e; --stripe-dim: #4a4430;
+  --lcd: #000; --lcd-fg: #1aff1a; --lcd-dim: #0d4d0d; --lcd-glow: rgba(26, 255, 26, .45);
+  --btn: #c3c3cf; --btn-hi: #f2f2f7; --btn-lo: #55556a; --btn-text: #15151f;
+  --loop: #33d6ff; --low: #19d219; --mid: #f2d016; --high: #ff5a2e; --todo: #1c3a1c; --warn: #ff3b2f;
+  --e0: #06150a; --e1: #0d3d14; --e2: #1f8a26; --e3: #8cff3b;
+  --sans: Tahoma, Verdana, "Segoe UI", sans-serif;
+  --mono: "Menlo", "Consolas", "DejaVu Sans Mono", monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; margin: 0; }
+html, body { height: 100%; }
+body {
+  background: var(--bg); color: var(--lcd-fg); font: 12px/1.25 var(--sans);
+  display: flex; flex-direction: column; gap: 6px;
+  padding: max(6px, env(safe-area-inset-top)) max(6px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left));
+  height: 100dvh; overflow: hidden; -webkit-user-select: none; user-select: none;
+}
+
+/* okno v štýle starého prehrávača: zošikmené hrany, pruhovaný titulok */
+.win {
+  background: var(--chrome);
+  border: 1px solid; border-color: var(--chrome-hi) var(--chrome-lo) var(--chrome-lo) var(--chrome-hi);
+  box-shadow: inset 1px 1px 0 #3c3c55, inset -1px -1px 0 #17171f, 0 0 0 1px #000;
+  display: flex; flex-direction: column; min-height: 0;
+}
+.tbar {
+  height: 16px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 4px;
+  background: repeating-linear-gradient(to bottom, var(--stripe-dim) 0 1px, transparent 1px 3px) 0 4px / 100% 9px no-repeat;
+  font: bold 9px/1 var(--sans); letter-spacing: .18em; text-transform: uppercase; color: #b8b8c8;
+}
+.tbar span { background: var(--chrome); padding: 0 5px; white-space: nowrap; }
+.tbar .grow { flex: 1; background: none; }
+/* farby deckov ako vo VDJ: 1 červená, 2 modrá, 3 zelená, 4 oranžová; stlmené, aby nekričali */
+.deck[data-id="1"] { --dk: #c8483b; --dk-dim: #5a2621; }
+.deck[data-id="2"] { --dk: #4a86d8; --dk-dim: #233a5c; }
+.deck[data-id="3"] { --dk: #46a457; --dk-dim: #224a29; }
+.deck[data-id="4"] { --dk: #d98a35; --dk-dim: #5c3c1c; }
+.deck .tbar { background-image: repeating-linear-gradient(to bottom, var(--dk-dim) 0 1px, transparent 1px 3px); }
+.deck.air .tbar { background-image: repeating-linear-gradient(to bottom, var(--dk) 0 1px, transparent 1px 3px); color: #f0ece0; }
+.deck .tbar .num { background: var(--dk); color: #0b0b12; padding: 0 7px; }
+.deck { box-shadow: inset 3px 0 0 var(--dk-dim), inset 1px 1px 0 #3c3c55, inset -1px -1px 0 #17171f, 0 0 0 1px #000; }
+.deck.air { box-shadow: inset 3px 0 0 var(--dk), inset 1px 1px 0 #3c3c55, inset -1px -1px 0 #17171f, 0 0 0 1px #000; }
+.tbar .lp { color: #0b0b12; background: var(--loop); padding: 0 6px; display: none; }
+.deck.looping .tbar .lp { display: inline; }
+.win.air .tbar { background-image: repeating-linear-gradient(to bottom, var(--stripe) 0 1px, transparent 1px 3px); color: #f0e6b8; }
+
+.lcd {
+  background: var(--lcd); color: var(--lcd-fg); text-shadow: 0 0 5px var(--lcd-glow);
+  border: 1px solid; border-color: var(--chrome-lo) var(--chrome-hi) var(--chrome-hi) var(--chrome-lo);
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+}
+.btn {
+  appearance: none; font: bold 11px/1 var(--sans); color: var(--btn-text); background: var(--btn);
+  border: 1px solid; border-color: var(--btn-hi) var(--btn-lo) var(--btn-lo) var(--btn-hi);
+  min-width: 40px; min-height: 32px; padding: 0 10px; cursor: pointer; letter-spacing: .05em;
+  touch-action: manipulation;
+}
+.btn:active, .btn[aria-pressed="true"] { border-color: var(--btn-lo) var(--btn-hi) var(--btn-hi) var(--btn-lo); background: #a9a9b8; }
+.btn:focus-visible { outline: 2px solid var(--lcd-fg); outline-offset: 1px; }
+
+/* hlavné okno: stav + ovládanie */
+#main .body { display: flex; align-items: center; gap: 8px; padding: 5px 6px 6px; flex-wrap: wrap; }
+#status { flex: 1 1 240px; min-width: 0; padding: 7px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; }
+#status.bad { color: var(--warn); text-shadow: 0 0 5px rgba(255, 59, 47, .5); }
+.group { display: flex; align-items: center; gap: 3px; }
+.group .lcd { min-width: 52px; text-align: center; padding: 8px 4px; font-size: 13px; }
+.group small { color: #8d8da6; font: bold 9px var(--sans); letter-spacing: .15em; margin-right: 3px; }
+
+/* decky */
+#decks { flex: 1; min-height: 0; display: grid; gap: 6px; grid-template-columns: 1fr; grid-auto-rows: minmax(0, 1fr); }
+#decks.n4 { overflow-y: auto; grid-auto-rows: minmax(230px, 1fr); }
+@media (min-width: 1000px) { #decks.n4 { grid-template-columns: 1fr 1fr; overflow: hidden; grid-auto-rows: minmax(0, 1fr); } }
+#decks:not(.n4) .win[data-id="3"], #decks:not(.n4) .win[data-id="4"] { display: none; }
+
+.deck .body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 5px; padding: 5px 6px 6px; }
+.deck.off .body { opacity: .5; }
+.top { display: grid; grid-template-columns: 1fr auto 1fr; gap: 5px; align-items: stretch; }
+.top .time { justify-self: start; } .top .chips { justify-self: end; }
+.time { font-size: 34px; line-height: 1; padding: 4px 8px 2px; letter-spacing: .02em; display: flex; align-items: center; }
+.time.soon { color: var(--warn); text-shadow: 0 0 6px rgba(255, 59, 47, .6); animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: .35; } }
+.track { padding: 3px 8px; overflow: hidden; }
+.marq { white-space: nowrap; overflow: hidden; font-size: 13px; color: #16c816; }
+.marq span { display: inline-block; }
+.marq.scroll span { animation: marq var(--dur, 10s) linear infinite; padding-right: 60px; }
+@keyframes marq { 0%, 15% { transform: translateX(0); } 100% { transform: translateX(var(--dist)); } }
+.chips { display: flex; flex-direction: column; gap: 3px; }
+.chip { display: flex; justify-content: space-between; gap: 8px; padding: 2px 6px; font-size: 13px; min-width: 92px; }
+.chip i { font: bold 9px/1.6 var(--sans); color: #6a8f6a; font-style: normal; letter-spacing: .12em; text-shadow: none; }
+
+.bpm { display: flex; align-items: baseline; justify-content: center; gap: 8px; padding: 2px 22px 0; font-size: 50px; line-height: 1.05; min-width: 230px; }
+.bpm b { font-weight: 700; }
+.bpm i { font: bold 10px var(--sans); color: #6a8f6a; font-style: normal; letter-spacing: .15em; text-shadow: none; }
+
+.wave { position: relative; flex: 1; min-height: 50px; }
+.wave canvas, .ovw canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.wave canvas { touch-action: none; }
+.ovw { position: relative; height: 38px; flex: none; }
+.msg { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 0 10px; font-size: 13px; pointer-events: none; }
+
+@media (max-width: 700px) {
+  .top { grid-template-columns: auto 1fr; }
+  .top .bpm { justify-self: stretch; min-width: 0; }
+  .chips { grid-column: 1 / -1; flex-direction: row; justify-self: stretch !important; }
+  .chip { flex: 1; }
+  .time { font-size: 26px; }
+  .bpm { font-size: 38px; }
+}
+@media (max-height: 560px) and (min-width: 701px) { .bpm { font-size: 34px; } .time { font-size: 26px; } .ovw { height: 28px; } }
+#decks.n4 .bpm { font-size: 40px; min-width: 190px; }
+@media (prefers-reduced-motion: reduce) { .marq.scroll span, .time.soon { animation: none; } }
+</style>
+</head>
+<body>
+<section class="win" id="main">
+  <div class="tbar"><span>VDJ Waveshare</span><span class="grow"></span></div>
+  <div class="body">
+    <div id="status" class="lcd">Pripájam sa k DJ počítaču</div>
+    <div class="group" role="group" aria-label="Zoom waveformu">
+      <small>ZOOM</small>
+      <button class="btn" id="zin" aria-label="Priblížiť">+</button>
+      <div class="lcd" id="zval">16 s</div>
+      <button class="btn" id="zout" aria-label="Oddialiť">&minus;</button>
+    </div>
+    <div class="group" role="group" aria-label="Zobrazenie">
+      <small>VIEW</small>
+      <button class="btn" id="vmix" aria-pressed="true">MIX</button>
+      <button class="btn" id="vbands" aria-pressed="false">PÁSMA</button>
+    </div>
+    <div class="group" role="group" aria-label="Počet deckov">
+      <small>DECKY</small>
+      <button class="btn" id="d2" aria-pressed="true">2</button>
+      <button class="btn" id="d4" aria-pressed="false">4</button>
+    </div>
+  </div>
+</section>
+<div id="decks"></div>
+
+<template id="tpl">
+  <section class="win deck off">
+    <div class="tbar"><span class="num"></span><span class="grow"></span><span class="lp"></span><span class="st">STOP</span></div>
+    <div class="body">
+      <div class="top">
+        <div class="lcd time">-</div>
+        <div class="lcd bpm"><b class="bpmv">---.-</b><i>BPM</i></div>
+        <div class="chips">
+          <div class="lcd chip"><i>KEY</i><b class="key">-</b></div>
+          <div class="lcd chip"><i>TEMPO</i><b class="tempo">-</b></div>
+        </div>
+      </div>
+      <div class="lcd track"><div class="marq"><span class="title"></span></div></div>
+      <div class="lcd wave"><canvas class="detail"></canvas><div class="msg"></div></div>
+      <div class="lcd ovw"><canvas class="overview"></canvas></div>
+    </div>
+  </section>
+</template>
+
+<script>
+const BPS = 100;                               // stĺpcov waveformu za sekundu
+const ZOOMS = [2, 4, 8, 16, 32, 64];           // sekúnd viditeľných v detaile
+const css = getComputedStyle(document.documentElement);
+const COL = Object.fromEntries(['low', 'mid', 'high', 'todo', 'lcd-fg', 'e0', 'e1', 'e2', 'e3', 'loop'].map(k => [k, css.getPropertyValue('--' + k).trim()]));
+const BANDS = ['low', 'mid', 'high'];
+const decks = {};
+const $status = document.getElementById('status'), $decks = document.getElementById('decks');
+
+// nastavenia: pamätá si ich prehliadač osvetľovača
+const prefs = { zoom: 3, view: 'mix', n: 2 };
+try { Object.assign(prefs, JSON.parse(localStorage.getItem('vdjw') || '{}')); } catch {}
+function save() { try { localStorage.setItem('vdjw', JSON.stringify(prefs)); } catch {} }
+function applyPrefs() {
+  prefs.zoom = Math.max(0, Math.min(ZOOMS.length - 1, prefs.zoom | 0));
+  document.getElementById('zval').textContent = ZOOMS[prefs.zoom] + ' s';
+  document.getElementById('vmix').setAttribute('aria-pressed', prefs.view === 'mix');
+  document.getElementById('vbands').setAttribute('aria-pressed', prefs.view === 'bands');
+  document.getElementById('d2').setAttribute('aria-pressed', prefs.n !== 4);
+  document.getElementById('d4').setAttribute('aria-pressed', prefs.n === 4);
+  $decks.classList.toggle('n4', prefs.n === 4);
+  for (const d of Object.values(decks)) d.ovCache = null;
+  save();
+}
+const zoomBy = k => { prefs.zoom += k; applyPrefs(); };
+document.getElementById('zin').onclick = () => zoomBy(-1);
+document.getElementById('zout').onclick = () => zoomBy(1);
+document.getElementById('vmix').onclick = () => { prefs.view = 'mix'; applyPrefs(); };
+document.getElementById('vbands').onclick = () => { prefs.view = 'bands'; applyPrefs(); };
+document.getElementById('d2').onclick = () => { prefs.n = 2; applyPrefs(); };
+document.getElementById('d4').onclick = () => { prefs.n = 4; applyPrefs(); };
+applyPrefs();
+
+// zoom gestom: koliesko/trackpad a dva prsty na tablete
+function gestures(cv) {
+  let acc = 0;
+  cv.addEventListener('wheel', e => {
+    e.preventDefault();
+    acc += e.deltaY;
+    if (Math.abs(acc) > 60) { zoomBy(Math.sign(acc)); acc = 0; }
+  }, { passive: false });
+  const pts = new Map(); let base = 0;
+  const dist = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+  cv.addEventListener('pointerdown', e => { pts.set(e.pointerId, e); if (pts.size === 2) base = dist(); });
+  cv.addEventListener('pointermove', e => {
+    if (!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, e);
+    if (pts.size !== 2 || !base) return;
+    const r = dist() / base;
+    if (r > 1.35) { zoomBy(-1); base = dist(); } else if (r < 0.74) { zoomBy(1); base = dist(); }
+  });
+  for (const t of ['pointerup', 'pointercancel', 'pointerleave']) cv.addEventListener(t, e => { pts.delete(e.pointerId); base = 0; });
+}
+
+function deck(id) {
+  if (decks[id]) return decks[id];
+  const el = document.getElementById('tpl').content.firstElementChild.cloneNode(true);
+  el.dataset.id = id;
+  const all = [...$decks.children];
+  $decks.insertBefore(el, all.find(x => +x.dataset.id > +id) || null);   // decky vždy v poradí 1-4
+  const q = s => el.querySelector(s);
+  q('.num').textContent = 'Deck ' + id;
+  const d = decks[id] = { id, el, q, detail: q('.detail'), ov: q('.overview'), msg: q('.msg'), time: q('.time'),
+    rev: null, wave: null, pending: null, anchor: null, rate: 1, s: {}, ovCache: null, ovAt: 0, norm: 1, energy: null };
+  gestures(d.detail);
+  return d;
+}
+
+const set = (el, txt) => { if (el.textContent !== txt) el.textContent = txt; };
+
+function marquee(d, title) {
+  const box = d.q('.marq'), span = d.q('.title');
+  if (span.textContent === title) return;
+  span.textContent = title;
+  box.classList.remove('scroll');
+  requestAnimationFrame(() => {
+    const over = span.scrollWidth - box.clientWidth;
+    if (over > 0) {
+      box.style.setProperty('--dist', -(over + 20) + 'px');
+      box.style.setProperty('--dur', Math.max(6, over / 25) + 's');
+      box.classList.add('scroll');
+    }
+  });
+}
+
+function update(state) {
+  set($status, state.online ? '*** VirtualDJ pripojený ***' : 'Plugin WaveShare neposiela dáta. Beží VirtualDJ a je na decku zapnutý efekt WaveShare?');
+  $status.classList.toggle('bad', !state.online);
+  const now = performance.now();
+  for (const [id, s] of Object.entries(state.decks)) {
+    const d = deck(id);
+    const sec = s.sec ?? (s.pos || 0) * (s.length || 0);
+    // Plynulý playhead: malú odchýlku dorovná postupne, veľkú (skok, pauza, nová skladba) hneď.
+    const pred = current(d);
+    d.anchor = d.anchor && s.playing && d.s.playing && Math.abs(sec - pred) < 0.25
+      ? { sec: pred + (sec - pred) * 0.15, t: now }
+      : { sec, t: now };
+    d.rate = s.rate ?? 1;
+    d.s = s;
+    if (s.rev !== d.rev) { d.rev = s.rev; loadWave(d); }
+    set(d.msg, !s.total ? (s.title ? 'Čakám na waveform. Je na decku zapnutý efekt WaveShare?' : '') : '');
+    marquee(d, s.title ? ((s.artist ? s.artist + ' - ' : '') + s.title).toUpperCase() : '*** PRÁZDNY DECK ***');
+    set(d.q('.bpmv'), s.bpm ? s.bpm.toFixed(1) : '---.-');
+    set(d.q('.key'), s.key || '-');
+    const t = s.playing && s.rate ? (s.rate - 1) * 100 : null;
+    set(d.q('.tempo'), t == null ? '-' : (t >= 0 ? '+' : '') + t.toFixed(1) + '%');
+    set(d.q('.st'), s.playing ? '▶ PLAY' : s.title ? '❙❙ PAUSE' : '■ STOP');
+    d.el.classList.toggle('looping', !!s.loop);
+    if (s.loop) set(d.q('.lp'), '\u27F2 LOOP ' + beats(s.loop.beats));
+    const live = s.audible ?? s.playing;
+    d.el.classList.toggle('off', !live);
+    d.el.classList.toggle('air', !!(live && s.playing));
+  }
+}
+
+// Waveform posiela plugin WaveShare cez server: celé pole pri novej skladbe, potom zmenené stĺpce cez SSE.
+async function loadWave(d) {
+  const rev = d.rev;
+  d.wave = null; d.ovCache = null; d.energy = null; d.norm = 1; d.pending = [];
+  try {
+    const r = await fetch(`/wave/${d.id}?rev=${rev}`);
+    const buf = new Uint8Array(await r.arrayBuffer());
+    if (d.rev !== rev || r.headers.get('X-Rev') != rev) return;
+    const total = buf.length / 4;
+    d.wave = { bins: buf.subarray(0, total * 3), have: buf.subarray(total * 3), dur: total / BPS };
+    for (const e of d.pending) applyWave(d, e);
+  } catch {}
+  d.pending = null;
+}
+
+function applyWave(d, e) {
+  if (e.rev !== d.rev) return;
+  if (!d.wave) { d.pending?.push(e); return; }
+  const data = Uint8Array.from(atob(e.data), c => c.charCodeAt(0));
+  const n = Math.min(data.length / 3, d.wave.have.length - e.start);
+  if (n <= 0) return;
+  d.wave.bins.set(data.subarray(0, n * 3), e.start * 3);
+  d.wave.have.fill(1, e.start, e.start + n);
+  d.dirty = true;
+}
+
+// Rozbor skladby: mierka (98. percentil, aby tiché aj hlasné skladby vyzerali podobne)
+// a energia po 2 s, rozdelená do 4 úrovní podľa tejto skladby. Prepočíta sa pri zmene dát.
+function analyze(d) {
+  const { bins, have } = d.wave, n = have.length;
+  const hist = new Uint32Array(256);
+  let cnt = 0;
+  for (let b = 0; b < n; b++) if (have[b]) { hist[Math.max(bins[b * 3], bins[b * 3 + 1], bins[b * 3 + 2])]++; cnt++; }
+  let p = 255;
+  for (let acc = 0, lim = cnt * 0.02; p > 0 && acc + hist[p] <= lim; p--) acc += hist[p];
+  d.norm = cnt ? 0.95 * 255 / Math.max(p, 20) : 1;
+  // energia: hlavne basy (kopák), menej stredy a výšky; kĺzavý priemer cez prefixové súčty
+  const W = 2 * BPS, pre = new Float64Array(n + 1);
+  for (let b = 0; b < n; b++) pre[b + 1] = pre[b] + (have[b] ? 0.6 * bins[b * 3] + 0.3 * bins[b * 3 + 1] + 0.1 * bins[b * 3 + 2] : 0);
+  const sm = new Float32Array(n);
+  for (let b = 0; b < n; b++) { const a = Math.max(0, b - W / 2), z = Math.min(n, b + W / 2); sm[b] = (pre[z] - pre[a]) / (z - a); }
+  const sorted = Float32Array.from(sm).sort(), top = sorted[Math.floor(n * 0.9)] || 1;
+  const e = d.energy = new Uint8Array(n);
+  for (let b = 0; b < n; b++) { const r = sm[b] / top; e[b] = !have[b] ? 255 : r < 0.45 ? 0 : r < 0.7 ? 1 : r < 0.9 ? 2 : 3; }
+}
+
+// Kreslenie: x po pixeloch, z každého rozsahu stĺpcov maximum. mode 'mix' = pásma cez seba, 'bands' = 3 pruhy.
+function bars(ctx, d, w, h, t0, t1, mode) {
+  const { bins, have } = d.wave, n = have.length, b0 = t0 * BPS, scale = (t1 - t0) * BPS / w, k255 = d.norm / 255;
+  const lanes = mode === 'bands';
+  ctx.fillStyle = COL.todo;                                    // nespočítané: tenká čiara
+  for (let x = 0; x < w; x++) {
+    const b = Math.floor(b0 + x * scale);
+    if (b >= 0 && b < n && !have[b]) ctx.fillRect(x, h / 2 - 1, 1, 2);
+  }
+  BANDS.forEach((band, k) => {
+    const laneH = lanes ? h / 3 : h, top = lanes ? (2 - k) * laneH : 0, c = top + laneH / 2;  // basy dole
+    ctx.fillStyle = COL[band];
+    ctx.beginPath();
+    for (let x = 0; x < w; x++) {
+      if (b0 + (x + 1) * scale <= 0) continue;                 // pred začiatkom skladby nič
+      const from = Math.max(0, Math.floor(b0 + x * scale));
+      const to = Math.min(n, Math.max(from + 1, Math.floor(b0 + (x + 1) * scale)));
+      let v = 0;
+      for (let b = from; b < to; b++) if (bins[b * 3 + k] > v) v = bins[b * 3 + k];
+      v = Math.min(1, v * k255);
+      if (!v) continue;
+      if (lanes) ctx.rect(x, top + laneH - v * laneH * 0.92, 1, Math.max(1, v * laneH * 0.92));
+      else ctx.rect(x, c - v * c, 1, Math.max(1, 2 * v * c));
+    }
+    ctx.fill();
+  });
+  if (lanes) {                                                  // oddeľovače a popisy pruhov
+    ctx.fillStyle = '#123312';
+    ctx.fillRect(0, Math.round(h / 3), w, devicePixelRatio);
+    ctx.fillRect(0, Math.round(2 * h / 3), w, devicePixelRatio);
+    ctx.font = `bold ${9 * devicePixelRatio}px Tahoma, Verdana, sans-serif`;
+    ctx.fillStyle = '#2f7a2f';
+    ['HIGH', 'MID', 'BASS'].forEach((t, i) => ctx.fillText(t, 4 * devicePixelRatio, i * h / 3 + 11 * devicePixelRatio));
+  }
+}
+
+// pás energie: tmavá = pokoj, svetlozelená = drop
+function energyStrip(ctx, d, w, y, hh, t0, t1) {
+  const e = d.energy; if (!e) return;
+  const n = e.length, b0 = t0 * BPS, scale = (t1 - t0) * BPS / w;
+  const lv = [COL.e0, COL.e1, COL.e2, COL.e3];
+  let runX = 0, runL = -1;
+  for (let x = 0; x <= w; x++) {
+    let L = -1;
+    if (x < w) {
+      const from = Math.floor(b0 + x * scale), to = Math.min(n, Math.max(from + 1, Math.floor(b0 + (x + 1) * scale)));
+      for (let b = Math.max(0, from); b < to; b++) if (e[b] !== 255 && e[b] > L) L = e[b];
+    }
+    if (L !== runL) {
+      if (runL >= 0) { ctx.fillStyle = lv[runL]; ctx.fillRect(runX, y, x - runX, hh); }
+      runX = x; runL = L;
+    }
+  }
+}
+
+function fit(cv) {
+  const w = Math.round(cv.clientWidth * devicePixelRatio), h = Math.round(cv.clientHeight * devicePixelRatio);
+  if (cv.width === w && cv.height === h) return false;
+  cv.width = w; cv.height = h;
+  return true;
+}
+
+function current(d) {
+  if (!d.anchor) return 0;
+  const dt = Math.min((performance.now() - d.anchor.t) / 1000, 0.5);
+  let sec = d.anchor.sec + (d.s.playing ? d.rate * dt : 0);
+  const L = d.s.loop;                                          // v loope sa playhead vracia na začiatok, nie dopredu
+  if (L && L.out > L.in && sec > L.out && d.anchor.sec <= L.out + 0.05) sec = L.in + (sec - L.in) % (L.out - L.in);
+  return sec;
+}
+
+function beats(b) {
+  if (!b) return '';
+  return b < 1 ? '1/' + Math.round(1 / b) : String(+b.toFixed(2));
+}
+
+// loop: svetlomodrá plocha a hrany medzi IN a OUT
+function loopBox(ctx, d, w, h, t0, t1, label) {
+  const L = d.s.loop; if (!L || !(L.out > L.in)) return;
+  const x0 = (L.in - t0) / (t1 - t0) * w, x1 = (L.out - t0) / (t1 - t0) * w;
+  if (x1 < 0 || x0 > w) return;
+  const px = devicePixelRatio;
+  ctx.globalAlpha = 0.18; ctx.fillStyle = COL.loop; ctx.fillRect(x0, 0, x1 - x0, h); ctx.globalAlpha = 1;
+  ctx.fillStyle = COL.loop;
+  ctx.fillRect(x0 - px, 0, 2 * px, h); ctx.fillRect(x1 - px, 0, 2 * px, h);
+  if (label) {
+    ctx.font = `bold ${10 * px}px Tahoma, Verdana, sans-serif`;
+    const t = 'LOOP ' + beats(L.beats), tw = ctx.measureText(t).width + 8 * px;
+    ctx.fillRect(Math.max(0, x0), h - 15 * px, tw, 15 * px);
+    ctx.fillStyle = '#0b0b12'; ctx.fillText(t, Math.max(0, x0) + 4 * px, h - 4 * px);
+  }
+}
+
+function playhead(ctx, x, h, from = 0) {
+  ctx.globalAlpha = 0.5; ctx.fillStyle = '#000'; ctx.fillRect(0, from, x, h - from); ctx.globalAlpha = 1;
+  ctx.fillStyle = '#fff'; ctx.fillRect(x - devicePixelRatio, 0, 2 * devicePixelRatio, h);
+}
+
+function fmt(s) { s = Math.max(0, s); return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`; }
+
+function frame() {
+  const now = performance.now();
+  for (const d of Object.values(decks)) {
+    if (d.el.offsetParent === null) continue;                  // skrytý deck nekreslíme
+    try {
+      fit(d.detail);
+      if (fit(d.ov)) d.ovCache = null;
+      // prehľad a rozbor najviac 4x za sekundu, nie pri každom pakete
+      if (d.wave && d.dirty && now - d.ovAt > 250) { analyze(d); d.ovCache = null; d.dirty = false; d.ovAt = now; }
+      if (d.wave && !d.energy) analyze(d);
+      const cur = current(d);
+      const dc = d.detail.getContext('2d'), oc = d.ov.getContext('2d');
+      const { width: w, height: h } = d.detail, { width: ow, height: oh } = d.ov;
+      dc.clearRect(0, 0, w, h);
+      oc.clearRect(0, 0, ow, oh);
+      if (d.wave) {
+        const win = ZOOMS[prefs.zoom], strip = 4 * devicePixelRatio;
+        energyStrip(dc, d, w, 0, strip, cur - win / 2, cur + win / 2);
+        bars(dc, d, w, h - strip, cur - win / 2, cur + win / 2, prefs.view);
+        loopBox(dc, d, w, h, cur - win / 2, cur + win / 2, true);
+        playhead(dc, w / 2, h);
+        if (!d.ovCache) {                                       // canvas namiesto OffscreenCanvas: starší iPad Safari
+          const c = d.ovCache = document.createElement('canvas');
+          c.width = ow; c.height = oh;
+          const x = c.getContext('2d'), eh = Math.round(oh * 0.3);
+          bars(x, d, ow, oh - eh, 0, d.wave.dur, 'mix');
+          energyStrip(x, d, ow, oh - eh, eh, 0, d.wave.dur);
+        }
+        oc.drawImage(d.ovCache, 0, 0);
+        loopBox(oc, d, ow, oh, 0, d.wave.dur, false);
+        playhead(oc, cur / d.wave.dur * ow, oh);
+      }
+      const left = (d.s.length || 0) - cur;
+      set(d.time, d.s.length ? '-' + fmt(left) : '--:--');
+      d.time.classList.toggle('soon', !!d.s.length && left < 30);
+    } catch (err) { console.error(err); }                      // chyba v jednom decku nezastaví ostatné
+  }
+  requestAnimationFrame(frame);
+}
+
+const es = new EventSource('/events');
+es.onmessage = e => update(JSON.parse(e.data));
+es.addEventListener('wave', e => { const w = JSON.parse(e.data); applyWave(deck(w.deck), w); });
+es.onerror = () => { set($status, 'Spojenie s DJ počítačom sa prerušilo. Skúšam znova.'); $status.classList.add('bad'); };
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

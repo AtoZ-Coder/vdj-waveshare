@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check server syntax
+        run: node --check server/server.js && node --check tools/udp-test.js
+      - name: Build plugin
+        run: plugin/build.sh --no-install
+      - name: Test plugin logic
+        run: plugin/test.sh
+      - name: Upload plugin
+        uses: actions/upload-artifact@v4
+        with:
+          name: WaveShare.bundle
+          path: plugin/WaveShare.bundle

@@ -1,0 +1,9 @@
+# VirtualDJ SDK headers: (c) Atomix, fetched by plugin/fetch-sdk.sh
+plugin/sdk/*
+!plugin/sdk/.gitkeep
+# build output
+plugin/*.bundle
+# runtime
+server/server.log
+node_modules/
+.DS_Store

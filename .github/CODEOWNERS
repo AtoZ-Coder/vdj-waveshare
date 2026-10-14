@@ -1,0 +1,5 @@
+# Reviewers requested automatically for changes in these paths
+*           @kebab-py
+/plugin/    @kebab-py
+/server/    @kebab-py @AtoZ-Coder
+/docs/      @kebab-py @AtoZ-Coder
